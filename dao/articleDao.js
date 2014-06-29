@@ -1,305 +1,264 @@
 'use strict';
-/*global require, module, Buffer, jsGen*/
+/*global require, module*/
 
-/*
-  convertID(id);
-  getArticlesIndex(date, limit, callback);
-  getLatestId(callback);
-  getArticle(_id, callback);
-  setArticle(articleObj, callback);
-  setFavor(articleObj);
-  setOppose(articleObj);
-  setMark(articleObj);
-  setComment(articleObj, callback);
-  setNewArticle(articleObj, callback);
-  delArticle(_idArray, callback);
- */
 var Thunk = require('thunks')(),
-  noop = jsGen.lib.tools.noop,
-  union = jsGen.lib.tools.union,
-  intersect = jsGen.lib.tools.intersect,
-  IDString = jsGen.lib.json.IDString,
-  defautArticle = jsGen.lib.json.Article,
-  globalConfig = jsGen.lib.json.GlobalConfig,
-  wrapCallback = jsGen.lib.tools.wrapCallback,
-  converter = jsGen.lib.converter,
-  articles = jsGen.dao.db.bind('articles');
+  Baseco = require('Baseco'),
+  tools = require('../lib/tools.js'),
+  json = require('./lib/json.js'),
+  collection = require('./dao/mongoDao.js').db.bind('articles'),
+  union = tools.union,
+  intersect = tools.intersect,
+  defautArticle = json.Article;
 
-module.exports = {
-  convertID: articles.convertID,
-  getArticlesIndex: articles.getArticlesIndex,
-  getLatestId: articles.getLatestId,
-  getArticle: articles.getArticle,
-  setArticle: articles.setArticle,
-  setFavor: articles.setFavor,
-  setOppose: articles.setOppose,
-  setMark: articles.setMark,
-  setComment: articles.setComment,
-  setNewArticle: articles.setNewArticle,
-  delArticle: articles.delArticle
+var baseco = new Baseco(62, json.IDString);
+
+exports.convertID = function (id) {
+  switch (typeof id) {
+    case 'string':
+      id = id.substring(1);
+      return baseco.gToD(id);
+    case 'number':
+      id = baseco.dToG(id);
+      while (id.length < 3) id = '0' + id;
+      return 'A' + id;
+  }
 };
 
-articles.bind({
+exports.getLatestId = function getLatestId() {
+  return Thunk(function (callback) {
+    collection.findOne({}, {
+      sort: {
+        _id: -1
+      },
+      hint: {
+        _id: 1
+      },
+      fields: {
+        _id: 1
+      }
+    }, callback);
+  });
+};
 
-  convertID: function (id) {
+exports.getArticlesIndex = function (iterator) {
+  return Thunk(function (callback) {
+    collection.find({}, {
+      sort: {
+        _id: 1
+      },
+      hint: {
+        _id: 1
+      },
+      fields: {
+        _id: 1,
+        author: 1,
+        date: 1,
+        display: 1,
+        status: 1,
+        updateTime: 1,
+        hots: 1
+      }
+    }).each(function (err, doc) {
+      if (doc) return iterator(doc);
+      callback(err);
+    });
+  });
+};
 
-    switch (typeof id) {
+exports.getArticle = function (_id) {
+  return Thunk(function (callback) {
+    collection.findOne({
+      _id: _id
+    }, {
+      sort: {
+        _id: -1
+      },
+      fields: {
+        author: 1,
+        date: 1,
+        display: 1,
+        status: 1,
+        refer: 1,
+        title: 1,
+        cover: 1,
+        content: 1,
+        hots: 1,
+        visitors: 1,
+        updateTime: 1,
+        collection: 1,
+        tagsList: 1,
+        favorsList: 1,
+        opposesList: 1,
+        markList: 1,
+        comment: 1,
+        commentsList: 1
+      }
+    }, callback);
+  });
+};
 
-      case 'string':
-        id = id.substring(1);
-        return converter(id, 62, IDString);
+exports.setArticle = function (articleObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        author: 0,
+        date: 0,
+        display: 0,
+        status: 0,
+        refer: '',
+        title: '',
+        cover: '',
+        content: '',
+        hots: 0,
+        visitors: 0,
+        updateTime: 0,
+        collection: 0,
+        tagsList: [0],
+        comment: true
+      };
 
-      case 'number':
-        id = converter(id, 62, IDString);
-        while (id.length < 3) id = '0' + id;
-        return 'A' + id;
+    intersect(newObj, articleObj);
+    setObj.$set = newObj;
+    collection.findAndModify({
+      _id: articleObj._id
+    }, [], setObj, {
+      w: 1,
+      'new': true
+    }, callback);
+  });
+};
 
-      return null;
+exports.setFavor = function (articleObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        favorsList: 0
+      };
+
+    intersect(newObj, articleObj);
+    if (newObj.favorsList < 0) {
+      newObj.favorsList = -newObj.favorsList;
+      setObj.$pull = {
+        favorsList: newObj.favorsList
+      };
+    } else {
+      setObj.$push = {
+        favorsList: newObj.favorsList
+      };
     }
 
-  },
+    collection.update({
+      _id: articleObj._id
+    }, setObj, callback);
+  });
+},
 
-  getLatestId: function () {
+exports.setOppose = function (articleObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        opposesList: 0
+      };
 
-    return Thunk.call(this, function (callback) {
+    intersect(newObj, articleObj);
+    if (newObj.opposesList < 0) {
+      newObj.opposesList = -newObj.opposesList;
+      setObj.$pull = {
+        opposesList: newObj.opposesList
+      };
+    } else {
+      setObj.$push = {
+        opposesList: newObj.opposesList
+      };
+    }
 
-      this.findOne({}, {
-        sort: {
-          _id: -1
-        },
-        hint: {
-          _id: 1
-        },
-        fields: {
-          _id: 1
-        }
+    collection.update({
+      _id: articleObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setMark = function (articleObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        markList: 0
+      };
+
+    intersect(newObj, articleObj);
+    if (newObj.markList < 0) {
+      newObj.markList = -newObj.markList;
+      setObj.$pull = {
+        markList: newObj.markList
+      };
+    } else {
+      setObj.$push = {
+        markList: newObj.markList
+      };
+    }
+
+    collection.update({
+      _id: articleObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setComment = function (articleObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        commentsList: 0
+      };
+
+    intersect(newObj, articleObj);
+    if (newObj.commentsList < 0) {
+      newObj.commentsList = -newObj.commentsList;
+      setObj.$pull = {
+        commentsList: newObj.commentsList
+      };
+    } else {
+      setObj.$push = {
+        commentsList: newObj.commentsList
+      };
+    }
+
+    collection.update({
+      _id: articleObj._id
+    }, setObj, {
+      w: 1
+    }, callback);
+  });
+};
+
+exports.setNewArticle = function (articleObj) {
+  return Thunk(function (callback) {
+    var article = union(defautArticle),
+      newArticle = union(defautArticle);
+
+    intersect(article, articleObj);
+    union(newArticle, article);
+
+    getLatestId(function (err, doc) {
+      if (err) return callback(err);
+      newArticle._id = doc ? (doc._id + 1) : 1;
+
+      collection.findAndModify({
+        _id: newArticle._id
+      }, [], newArticle, {
+        w: 1,
+        upsert: true,
+        new: true
       }, callback);
-
     });
+  });
+};
 
-  },
-
-  getArticlesIndex: function (iterator) {
-
-    return Thunk.call(this, function (callback) {
-
-      this.find({}, {
-        sort: {
-          _id: 1
-        },
-        hint: {
-          _id: 1
-        },
-        fields: {
-          _id: 1,
-          author: 1,
-          date: 1,
-          display: 1,
-          status: 1,
-          updateTime: 1,
-          hots: 1
-        }
-      }).each(function (err, doc) {
-        if (doc) return iterator(doc);
-        callback(err);
-      });
-
-    });
-
-  },
-
-  getArticle: function (_id, callback) {
-      this.findOne({
-          _id: +_id
-      }, {
-          sort: {
-              _id: -1
-          },
-          fields: {
-              author: 1,
-              date: 1,
-              display: 1,
-              status: 1,
-              refer: 1,
-              title: 1,
-              cover: 1,
-              content: 1,
-              hots: 1,
-              visitors: 1,
-              updateTime: 1,
-              collection: 1,
-              tagsList: 1,
-              favorsList: 1,
-              opposesList: 1,
-              markList: 1,
-              comment: 1,
-              commentsList: 1
-          }
-      }, wrapCallback(callback));
-  },
-
-  setArticle: function (articleObj, callback) {
-      var setObj = {},
-          newObj = {
-              author: 0,
-              date: 0,
-              display: 0,
-              status: 0,
-              refer: '',
-              title: '',
-              cover: '',
-              content: '',
-              hots: 0,
-              visitors: 0,
-              updateTime: 0,
-              collection: 0,
-              tagsList: [0],
-              comment: true
-          };
-
-      intersect(newObj, articleObj);
-      setObj.$set = newObj;
-      if (callback) {
-          this.findAndModify({
-              _id: articleObj._id
-          }, [], setObj, {
-              w: 1,
-              new: true
-          }, wrapCallback(callback));
-      } else {
-          this.update({
-              _id: articleObj._id
-          }, setObj, noop);
-      }
-  },
-
-  setFavor: function (articleObj) {
-      var setObj = {},
-          newObj = {
-              favorsList: 0
-          };
-
-      intersect(newObj, articleObj);
-      if (newObj.favorsList < 0) {
-          newObj.favorsList = -newObj.favorsList;
-          setObj.$pull = {
-              favorsList: newObj.favorsList
-          };
-      } else {
-          setObj.$push = {
-              favorsList: newObj.favorsList
-          };
-      }
-
-      this.update({
-          _id: articleObj._id
-      }, setObj, noop);
-  },
-
-  setOppose: function (articleObj) {
-      var setObj = {},
-          newObj = {
-              opposesList: 0
-          };
-
-      intersect(newObj, articleObj);
-      if (newObj.opposesList < 0) {
-          newObj.opposesList = -newObj.opposesList;
-          setObj.$pull = {
-              opposesList: newObj.opposesList
-          };
-      } else {
-          setObj.$push = {
-              opposesList: newObj.opposesList
-          };
-      }
-
-      this.update({
-          _id: articleObj._id
-      }, setObj, noop);
-  },
-
-  setMark: function (articleObj) {
-      var setObj = {},
-          newObj = {
-              markList: 0
-          };
-
-      intersect(newObj, articleObj);
-      if (newObj.markList < 0) {
-          newObj.markList = -newObj.markList;
-          setObj.$pull = {
-              markList: newObj.markList
-          };
-      } else {
-          setObj.$push = {
-              markList: newObj.markList
-          };
-      }
-
-      this.update({
-          _id: articleObj._id
-      }, setObj, noop);
-  },
-
-  setComment: function (articleObj, callback) {
-      var setObj = {},
-          newObj = {
-              commentsList: 0
-          };
-
-      intersect(newObj, articleObj);
-      if (newObj.commentsList < 0) {
-          newObj.commentsList = -newObj.commentsList;
-          setObj.$pull = {
-              commentsList: newObj.commentsList
-          };
-      } else {
-          setObj.$push = {
-              commentsList: newObj.commentsList
-          };
-      }
-
-      this.update({
-          _id: articleObj._id
-      }, setObj, {
-          w: 1
-      }, wrapCallback(callback));
-  },
-
-  setNewArticle: function (articleObj, callback) {
-      var that = this,
-          article = union(defautArticle),
-          newArticle = union(defautArticle);
-      callback = callback || callbackFn;
-      intersect(article, articleObj);
-      union(newArticle, article);
-
-      this.getLatestId(function (err, doc) {
-          if (err) {
-              return callback(err, null);
-          }
-          if (!doc) {
-              newArticle._id = 1;
-          } else {
-              newArticle._id = doc._id + 1;
-          }
-
-          that.findAndModify({
-              _id: newArticle._id
-          }, [], newArticle, {
-              w: 1,
-              upsert: true,
-              new: true
-          }, wrapCallback(callback));
-      });
-  },
-
-  delArticle: function (_id, callback) {
-      this.remove({
-          _id: +_id
-      }, {
-          w: 1
-      }, wrapCallback(callback));
-  }
-});
+exports.delArticle = function (_id) {
+  return Thunk(function (callback) {
+    collection.remove({
+      _id: _id
+    }, {
+      w: 1
+    }, callback);
+  });
+};
