@@ -745,23 +745,23 @@ function setArticle(req, res) {
     }).then(function (cont, article) {
         if (req.path[3] === 'comment') {
             addComment(req, article._id).then(function (cont, comment) {
-                return res.sendjson(resJson(null, comment));
+                return res.send(resJson(null, comment));
             }).fail(cont);
         } else if (req.path[3] === 'edit') {
             editArticle(req, article._id).then(function (cont, comment) {
-                return res.sendjson(resJson(null, comment));
+                return res.send(resJson(null, comment));
             }).fail(cont);
         } else if (req.path[3] === 'mark') {
             setMark(req, article._id).then(function (cont, mark) {
-                return res.sendjson(resJson(null, mark));
+                return res.send(resJson(null, mark));
             }).fail(cont);
         } else if (req.path[3] === 'favor') {
             setFavor(req, article._id).then(function (cont, favor) {
-                return res.sendjson(resJson(null, favor));
+                return res.send(resJson(null, favor));
             }).fail(cont);
         } else if (req.path[3] === 'oppose') {
             setOppose(req, article._id).then(function (cont, oppose) {
-                return res.sendjson(resJson(null, oppose));
+                return res.send(resJson(null, oppose));
             }).fail(cont);
         } else {
             cont(jsGen.Err(msg.MAIN.requestDataErr));

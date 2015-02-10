@@ -614,7 +614,7 @@ function getUserInfo(req, res) {
 function editUser(req, res) {
     var defaultObj = {
         name: '',
-        passwd: '',
+        passWd: '',
         sex: '',
         avatar: '',
         desc: '',
